@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Matriks dengan Grafik</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@11.9.1/lib/browser/math.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Sama seperti kode sebelumnya */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            animation: fadeIn 1s ease-in;
+        }
+        h1 {
+            text-align: center;
+            color: #4a4a4a;
+            margin-bottom: 20px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        p {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #4a4a4a;
+        }
+        textarea, select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        textarea:focus, select:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .export-buttons button {
+            flex: 1;
+            width: auto;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+            border-radius: 8px;
+            animation: slideIn 0.5s ease-out;
+            font-family: 'Courier New', monospace;
+        }
+        #history {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            background: #f0f0f0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+        }
+        canvas {
+            max-width: 100%;
+            height: 400px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kalkulator Matriks dengan Grafik</h1>
+        <p>Masukkan matriks dalam format [[a,b],[c,d]] (contoh: [[1,2],[3,4]]). Pilih operasi dan isi matriks kedua jika diperlukan. Grafik menampilkan hasil sebagai heatmap.</p>
+        
+        <label for="matrix1">Matriks 1:</label>
+        <textarea id="matrix1" rows="3" placeholder="Contoh: [[1,2],[3,4]]"></textarea>
+        
+        <label for="operation">Operasi:</label>
+        <select id="operation">
+            <option value="add">Penjumlahan (+)</option>
+            <option value="subtract">Pengurangan (-)</option>
+            <option value="multiply">Perkalian (*)</option>
+            <option value="determinant">Determinan</option>
+            <option value="inverse">Invers</option>
+            <option value="adjoint">Adjoint</option>
+            <option value="transpose">Transpose</option>
+            <option value="trace">Trace</option>
+        </select>
+        
+        <div id="matrix2Div">
+            <label for="matrix2">Matriks 2 (untuk +, -, *):</label>
+            <textarea id="matrix2" rows="3" placeholder="Contoh: [[5,6],[7,8]]"></textarea>
+        </div>
+        
+        <button onclick="calculate()">Hitung dan Plot Grafik</button>
+        
+        <div class="export-buttons">
+            <button onclick="exportAsText()">Ekspor sebagai TXT</button>
+            <button onclick="exportAsCSV()">Ekspor sebagai CSV</button>
+        </div>
+        
+        <div id="output"></div>
+        <div id="history"></div>
+        <canvas id="chart"></canvas>
+    </div>
+    
+    <script>
+        let chart;
+        let lastResult = null; // Untuk riwayat
+        
+        // Fungsi helper untuk validasi matriks
+        function isValidMatrix(arr) {
+            if (!Array.isArray(arr) || arr.length === 0) return false;
+            const cols = arr[0].length;
+            return arr.every(row => Array.isArray(row) && row.length === cols && row.every(val => typeof val === 'number'));
+        }
+        
+        // Fungsi helper untuk menghitung adjoint matriks
+        function calculateAdjoint(matrix) {
+            const n = matrix._size[0];
+            if (n === 1) return math.matrix([[1]]); // Kasus khusus 1x1
+            const cofactorMatrix = [];
+            
+            for (let i = 0; i < n; i++) {
+                cofactorMatrix[i] = [];
+                for (let j = 0; j < n; j++) {
+                    const minor = [];
+                    for (let row = 0; row < n; row++) {
+                        if (row === i) continue;
+                        const minorRow = [];
+                        for (let col = 0; col < n; col++) {
+                            if (col === j) continue;
+                            minorRow.push(matrix._data[row][col]);
+                        }
+                        minor.push(minorRow);
+                    }
+                    const sign = (i + j) % 2 === 0 ? 1 : -1;
+                    const detMinor = math.det(math.matrix(minor));
+                    cofactorMatrix[i][j] = sign * detMinor;
+                }
+            }
+            return math.transpose(math.matrix(cofactorMatrix));
+        }
+        
+        // Fungsi helper untuk format matriks sebagai teks vertikal dengan alignment
+        function formatMatrixAsText(matrix) {
+            const rows = matrix._size[0];
+            const cols = matrix._size[1];
+            const data = matrix._data;
+            
+            const colWidths = [];
+            for (let j = 0; j < cols; j++) {
+                let maxWidth = 0;
+                for (let i = 0; i < rows; i++) {
+                    const str = data[i][j].toString();
+                    maxWidth = Math.max(maxWidth, str.length);
+                }
+                colWidths[j] = maxWidth;
+            }
+            
+            let text = '';
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    const str = data[i][j].toString();
+                    text += str.padStart(colWidths[j]) + ' ';
+                }
+                text = text.trim() + '\n';
+            }
+            return text.trim();
+        }
+        
+        // Fungsi untuk ekspor sebagai teks
+        function exportAsText() {
+            if (!lastResult) return alert('Tidak ada hasil untuk diekspor.');
+            const blob = new Blob([lastResult], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hasil_matriks.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Fungsi untuk ekspor sebagai CSV
+        function exportAsCSV() {
+            if (!lastResult || !lastResult.includes('\n')) return alert('Hasil bukan matriks, tidak bisa ekspor CSV.');
+            const csv = lastResult.replace(/\n/g, '\r\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hasil_matriks.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function calculate() {
+            const matrix1Str = document.getElementById('matrix1').value;
+            const matrix2Str = document.getElementById('matrix2').value;
+            const op = document.getElementById('operation').value;
+            let result = '';
+            
+            try {
+                const matrix1Data = JSON.parse(matrix1Str);
+                if (!isValidMatrix(matrix1Data)) throw new Error('Matriks 1 tidak valid. Pastikan format array 2D angka.');
+                const matrix1 = math.matrix(matrix1Data);
+                if (matrix1._size[0] > 10 || matrix1._size[1] > 10) throw new Error('Matriks maksimal 10x10 untuk performa.');
+                
+                let resultMatrix;
+                
+                if (op === 'add' || op === 'subtract' || op === 'multiply') {
+                    const matrix2Data = JSON.parse(matrix2Str);
+                    if (!isValidMatrix(matrix2Data)) throw new Error('Matriks 2 tidak valid.');
+                    const matrix2 = math.matrix(matrix2Data);
+                    if (matrix2._size[0] > 10 || matrix2._size[1] > 10) throw new Error('Matriks maksimal 10x10.');
+                    
+                    if (op === 'add' || op === 'subtract') {
+                        if (!math.deepEqual(matrix1._size, matrix2._size)) {
+                            throw new Error('Matriks harus memiliki ukuran yang sama untuk penjumlahan/pengurangan.');
+                        }
+                    } else if (op === 'multiply') {
+                        if (matrix1._size[1] !== matrix2._size[0]) {
+                            throw new Error('Jumlah kolom Matriks 1 harus sama dengan jumlah baris Matriks 2 untuk perkalian.');
+                        }
+                    }
+                    
+                    if (op === 'add') {
+                        resultMatrix = math.add(matrix1, matrix2);
+                    } else if (op === 'subtract') {
+                        resultMatrix = math.subtract(matrix1, matrix2);
+                    } else if (op === 'multiply') {
+                        resultMatrix = math.multiply(matrix1, matrix2);
+                    }
+                    result = formatMatrixAsText(resultMatrix);
+                } else if (op === 'determinant') {
+                    if (matrix1._size[0] !== matrix1._size[1]) {
+                        throw new Error('Determinan hanya untuk matriks persegi.');
+                    }
+                    result = `Determinan: ${math.det(matrix1)}`;
+                    resultMatrix = null;
+                } else if (op === 'inverse') {
+                    if (matrix1._size[0] !== matrix1._size[1]) {
+                        throw new Error('Invers hanya untuk matriks persegi.');
+                    }
+                    resultMatrix = math.inv(matrix1);
+                    result = formatMatrixAsText(resultMatrix);
+                } else if (op === 'adjoint') {
+                    if (matrix1._size[0] !== matrix1._size[1]) {
+                        throw new Error('Adjoint hanya untuk matriks persegi.');
+                    }
+                    resultMatrix = calculateAdjoint(matrix1);
+                    result = formatMatrixAsText(resultMatrix);
+                } else if (op === 'transpose') {
+                    resultMatrix = math.transpose(matrix1);
+                    result = formatMatrixAsText(resultMatrix);
+                } else if (op === 'trace') {
+                    if (matrix1._size[0] !== matrix1._size[1]) {
+                        throw new Error('Trace hanya untuk matriks persegi.');
+                    }
+                    result = `Trace: ${math.trace(matrix1)}`;
+                    resultMatrix = null;
+                }
+                
+                lastResult = result; // Simpan untuk riwayat dan ekspor
+                localStorage.setItem('lastMatrixResult', result); // Simpan di localStorage
+                
+                document.getElementById('output').innerHTML = `<strong>Hasil:</strong><br><pre>${result}</pre>`;
+                document.getElementById('history').innerHTML = `<strong>Riwayat Terakhir:</strong><br><pre>${localStorage.getItem('lastMatrixResult') || 'Belum ada'}</pre>`;
+                
+                if (resultMatrix) {
+                    plotHeatmap(resultMatrix);
+                } else {
+                    if (chart) chart.destroy();
+                    document.getElementById('chart').style.display = 'none';
+                }
+            } catch (e) {
+                document.getElementById('output').innerHTML = `<strong>Error:</strong> ${e.message}`;
+                if (chart) chart.destroy();
+                document.getElementById('chart').style.display = 'none';
+            }
+        }
+        
+        function plotHeatmap(matrix) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            document.getElementById('chart').style.display = 'block';
+            
+            const data = matrix._data;
+            const rows = matrix._size[0];
+            const cols = matrix._size[1];
+            
+            const labels = [];
+            const flatData = [];
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    labels.push(`(${i+1},${j+1})`);
+                    flatData.push(data[i][j]);
+                }
+            }
+            
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Nilai Elemen',
+                        data: flatData,
+                        backgroundColor: flatData.map(val => {
+                            const intensity = Math.min(Math.max((val + 10) / 20, 0), 1);
+                            return `rgba(${255 * (1 - intensity)}, ${255 * intensity}, 100, 0.8)`;
+                        }),
+                        borderColor: 'rgba(0,0,0,0.1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Posisi (Baris, Kolom)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Nilai'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Tampilkan input matriks 2 hanya untuk operasi yang butuh
+        document.getElementById('operation').addEventListener('change', function() {
+            const op = this.value;
+            document.getElementById('matrix2Div').style.display = (op === 'add' || op === 'subtract' || op === 'multiply') ? 'block' : 'none';
+        });
+        
+        // Load riwayat saat halaman dimuat
+        window.onload = function() {
+            const saved = localStorage.getItem('lastMatrixResult');
+            if (saved) {
+                document.getElementById('history').innerHTML = `<strong>Riwayat Terakhir:</strong><br><pre>${saved}</pre>`;
+            }
+        };
+    </script>
+</body>
+</html>
